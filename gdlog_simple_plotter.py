@@ -252,7 +252,7 @@ def parse_contents(list_of_contents, list_of_names, list_of_dates):
     strFcLogVersion = ''
     strFcType = ''
     strUAVModel = ''
-    strIsSim = ''
+    strUserEnv = ''
     strMissionType = ''
     for contents, filename, date in zip(list_of_contents, list_of_names, list_of_dates):
         content_type, content_string = contents.split(',')
@@ -319,8 +319,8 @@ def parse_contents(list_of_contents, list_of_names, list_of_dates):
             try:
                 if len(df) > 0:
                     df = df.drop([0])  # delete data with initial value
-                    df = df[df['rosTime'] > 1577840400] # Ignore data before 2020 January 1st Wednesday AM 1:00:00
                     df = df.dropna(axis=0)  # delete data with NaN
+                    df = df[df['rosTime'] > 1577840400] # Ignore data before 2020 January 1st Wednesday AM 1:00:00
                     df = df.reset_index(drop=True)
                     df.columns = df.columns.str.strip()
 
@@ -375,15 +375,17 @@ def parse_contents(list_of_contents, list_of_names, list_of_dates):
                     df.loc[df.fcMcMode == 2, 'strFcMcMode'] = 'Auto'
                     df.loc[df.fcMcMode == 3, 'strFcMcMode'] = 'Boot'
                     df.loc[df.fcMcMode == 4, 'strFcMcMode'] = 'Standby'
+                    df.loc[df.fcMcMode == 255, 'strFcMcMode'] = 'SafeHold'
                     df.loc[df.fcMcMode == 0, 'colorFcMcMode'] = 'yellow'
-                    df.loc[df.fcMcMode == 1, 'colorFcMcMode'] = 'lightcoral'
+                    df.loc[df.fcMcMode == 1, 'colorFcMcMode'] = 'lightCoral'
                     df.loc[df.fcMcMode == 2, 'colorFcMcMode'] = 'turquoise'
-                    df.loc[df.fcMcMode == 3, 'colorFcMcMode'] = 'LightPink'
-                    df.loc[df.fcMcMode == 4, 'colorFcMcMode'] = 'Blue'
+                    df.loc[df.fcMcMode == 3, 'colorFcMcMode'] = 'lightPink'
+                    df.loc[df.fcMcMode == 4, 'colorFcMcMode'] = 'blue'
+                    df.loc[df.fcMcMode == 255, 'colorFcMcMode'] = 'red'
                     df['diffFcMcMode'] = df['fcMcMode'].diff()
 
                     fcMcMode_index = df.index[df['diffFcMcMode'] != 0].tolist()
-                    fcMcMode_index = fcMcMode_index - fcMcMode_index[0]
+                    fcMcMode_index = [fcMcMode_index[i] - fcMcMode_index[0] for i in range(len(fcMcMode_index))]
                     fcMcMode_index = np.append(fcMcMode_index, len(df)-1)
                     fcMcMode_value = df.iloc[fcMcMode_index].strFcMcMode.tolist()
                     fcMcMode_color = df.iloc[fcMcMode_index].colorFcMcMode.tolist()
@@ -397,8 +399,12 @@ def parse_contents(list_of_contents, list_of_names, list_of_dates):
                     strUAVModel = listUAVModel[df.UAVModel[0]]
 
                 if 'IsSim' in df.columns:
-                    listIsSim = ['False', 'True']
-                    strIsSim = listIsSim[df.IsSim[0]]
+                    listIsSim = ['Real', 'Sim']
+                    strUserEnv = listIsSim[df.IsSim[0]]
+
+                if 'userEnv' in df.columns:
+                    listUserEnv = ['Real', 'SILS', 'HILS']
+                    strUserEnv = listUserEnv[df.userEnv[0]]
 
                 if 'missionType' in df.columns:
                     listMissionType = ['MISSION_TYPE_5_1', 'MISSION_TYPE_5_2', 'MISSION_TYPE_4_1',
@@ -519,8 +525,8 @@ def parse_contents(list_of_contents, list_of_names, list_of_dates):
                           html.B(strFcType),
                           ' ㅤㅤㅤㅤ [UAVModel] ㅤ',
                           html.B(strUAVModel),
-                          ' ㅤㅤㅤㅤ [IsSim] ㅤ',
-                          html.B(strIsSim),
+                          ' ㅤㅤㅤㅤ [userEnv] ㅤ',
+                          html.B(strUserEnv),
                           ' ㅤㅤㅤㅤ [missionType] ㅤ',
                           html.B(strMissionType)]
             )
@@ -614,7 +620,19 @@ def update_df_data(submit_clicks):
                     cut_end = fcMcMode_index[idx+1]
                     break
             df = df[cut_begin:cut_end]
+            
+            if ('posNED_m_0' in df.columns):
+                    # Ignore position data under -1,000m
+                df = df[df['posNED_m_0'] > -1000]
+                df = df[df['posNED_m_1'] > -1000]
+                df = df[df['posNED_m_2'] > -1000]
+                # Ignore position data over +1,000m
+                df = df[df['posNED_m_0'] < 1000]
+                df = df[df['posNED_m_1'] < 1000]
+                df = df[df['posNED_m_2'] < 1000]
+
             df = df.reset_index(drop=True)
+
             fcMcMode_index = fcMcMode_index[cut_begin_idx:cut_end_idx] - fcMcMode_index[cut_begin_idx]
             fcMcMode_index = np.append(fcMcMode_index, len(df)-1)
             fcMcMode_value = fcMcMode_value[cut_begin_idx:cut_end_idx]
